@@ -13,8 +13,7 @@ Client must parse flags in YCSB format:
 ```
 
 Where `command` can be either `load` or `run`. The path to the workload file
-specifies a [YCSB workload file]
-(https://github.com/brianfrankcooper/YCSB/blob/master/workloads/workload_template).
+specifies a [YCSB workload file](https://github.com/brianfrankcooper/YCSB/blob/master/workloads/workload_template).
 Client must read the following parameters from the workload file.
 1. `readproportion`
 2. `updateproportion`
