@@ -13,81 +13,17 @@ Usage:
 
 """
 
+import numpy
 import optparse
 import random
 import string
+import threading
 import timeit
 
 from google.cloud import spanner
 
 
-# TODO: Generate keys following the YCSB key distribution with given record
-# count.
-KEYS = ['user7592730522480249475',
-        'user7592843607087762572',
-        'user7592948837698091358',
-        'user7592956691695275669',
-        'user7593061922305604455',
-        'user7593290482992389923',
-        'user7593403567599903020',
-        'user7593508798210231806',
-        'user7593516652207416117',
-        'user7593621882817744903',
-        'user7593629736814929214',
-        'user7593734967425258000',
-        'user7593848052032771097',
-        'user7594181843329885351',
-        'user7594294927937398448',
-        'user759475617603741620',
-        'user7595188679746653150',
-        'user7595301764354166247',
-        'user7596409868082749357',
-        'user7596522952690262454',
-        'user759696324293342777',
-        'user7596969828594889805',
-        'user7597416704499517156',
-        'user7597529789107030253',
-        'user7597863580404144507',
-        'user7597976665011657604',
-        'user7598081895621986390',
-        'user7598089749619170701',
-        'user759809408900855874',
-        'user7598194980229499487',
-        'user7598202834226683798',
-        'user7598308064837012584',
-        'user7598421149444525681',
-        'user7598649710131311149',
-        'user7598762794738824246',
-        'user7598868025349153032',
-        'user7598875879346337343',
-        'user7598981109956666129',
-        'user7598983501428425403',
-        'user7599094194564179226',
-        'user7599096586035938500',
-        'user7599201816646267286',
-        'user7599209670643451597',
-        'user7599314901253780383',
-        'user7599427985861293480',
-        'user7599654155076319674',
-        'user7599874861765920831',
-        'user7599987946373433928',
-        'user7600101030980947025',
-        'user7600214115588460122']
-
-
-DUMMY_OUTPUT = """[OVERALL], RunTime(ms), 172520.0
-[OVERALL], Throughput(ops/sec), 289.8214699744957
-[INSERT], Operations, 50000
-[INSERT], AverageLatency(us), 67995.35378
-[INSERT], LatencyVariance(us), 1.2098756170999897E10
-[INSERT], MinLatency(us), 26700
-[INSERT], MaxLatency(us), 5103261
-[INSERT], 95thPercentileLatency(us), 143000
-[INSERT], 99thPercentileLatency(us), 253000
-[INSERT], Return=OK, 50000
-[INSERT], 0, 0"""
-
-
+KEYS = []
 OPERATIONS = ['readproportion', 'updateproportion', 'scanproportion',
               'insertproportion']
 
@@ -99,11 +35,15 @@ def ParseOptions():
                     default='', help='The path to a YCSB workload file.')
   parser.add_option('-p', '--parameter', action='append', dest='parameters',
                     default=[], help='The key=value pair of parameter.')
+  parser.add_option('-b', '--num_bucket', action='store', type='int',
+                    dest='num_bucket', default=1000,
+                    help='The number of buckets in output.')
 
   options, args = parser.parse_args()
 
   parameters = {}
   parameters['command'] = args[0]
+  parameters['num_bucket'] = options.num_bucket
 
   for parameter in options.parameters:
     parts = parameter.strip().split('=')
@@ -130,10 +70,20 @@ def OpenDatabase(parameters):
   return database
 
 
+def LoadKeys(database, parameters):
+  """Loads keys from database."""
+  global KEYS
+  KEYS = []
+  results = database.execute_sql('SELECT u.id FROM %s u' % parameters['table'])
+
+  for row in results:
+    KEYS.append(row[0])
+
+
 def Read(database, table, key):
   """Does a single read operation."""
-  result = database.execute_sql('SELECT u.* FROM usertable u WHERE u.key="%s"' %
-                                key)
+  result = database.execute_sql('SELECT u.* FROM %s u WHERE u.key="%s"' %
+                                (table, key))
 
 
 def Update(database, table, key):
@@ -173,15 +123,79 @@ def DoOperation(database, table, operation, latencies_ms):
   latencies_ms[operation].append((end - start) * 1000)
 
 
-def AggregateMetrics(latencies_ms):
+def AggregateMetrics(latencies_ms, duration_ms, num_bucket):
   """Aggregates metrics."""
-  # TODO: Print aggregated metrics following YCSB output format.
-  print latencies_ms
+  overall_op_count = 0
+  op_counts = {}
+  for operation in latencies_ms.keys():
+    op_counts[operation] = len(latencies_ms[operation])
+    overall_op_count += op_counts[operation]
+
+  print '[OVERALL], RumTime(ms), %f' % duration_ms
+  print '[OVERALL], Throughput(ops/sec), %f' % (float(overall_op_count) /
+                                                duration_ms * 1000.0)
+
+  for operation in op_counts.keys():
+    operation_upper = operation.upper()
+    print '[%s], Operations, %d' % (operation_upper, op_counts[operation])
+    print '[%s], AverageLatency(us), %f' % (
+        operation_upper, numpy.average(latencies_ms[operation]) * 1000.0)
+    print '[%s], LatencyVariance(us), %f' % (
+        operation_upper, numpy.std(latencies_ms[operation]) * 1000.0)
+    print '[%s], MinLatency(us), %f' % (
+        operation_upper, min(latencies_ms[operation]) * 1000.0)
+    print '[%s], MaxLatency(us), %f' % (
+        operation_upper, max(latencies_ms[operation]) * 1000.0)
+    print '[%s], 95thPercentileLatency(us), %f' % (
+        operation_upper,
+        numpy.percentile(latencies_ms[operation], 95.0) * 1000.0)
+    print '[%s], 99thPercentileLatency(us), %f' % (
+        operation_upper,
+        numpy.percentile(latencies_ms[operation], 99.0) * 1000.0)
+    print '[%s], Return=OK, %d' % (operation_upper, op_counts[operation])
+    latency_array = numpy.array(latencies_ms[operation])
+    for j in range(num_bucket):
+      print '[%s], %d, %d' % (
+          operation_upper, j,
+          ((j <= latency_array) & (latency_array < (j + 1))).sum())
+    print '[%s], >%d, %d' % (
+          operation_upper, num_bucket, (num_bucket <= latency_array).sum())
+
+
+class WorkloadThread(threading.Thread):
+  """A single thread running workload."""
+
+  def __init__(self, database, parameters, total_weight, weights, operations):
+    threading.Thread.__init__(self)
+    self._database = database
+    self._parameters = parameters
+    self._total_weight = total_weight
+    self._weights = weights
+    self._operations = operations
+    self._latencies_ms = {}
+    for operation in self._operations:
+      self._latencies_ms[operation] = []
+
+  def run(self):
+    """Run a single thread of the workload."""
+    i = 0
+    operation_count = int(self._parameters['operationcount'])
+    while i < operation_count:
+      i += 1
+      weight = random.uniform(0, self._total_weight)
+      for j in range(len(self._weights)):
+        if weight <= self._weights[j]:
+          DoOperation(self._database, self._parameters['table'],
+                      self._operations[j], self._latencies_ms)
+          break
+
+  def latencies_ms(self):
+    """Returns the latencies."""
+    return self._latencies_ms
 
 
 def RunWorkload(database, parameters):
   """Runs workload against the database."""
-  # TODO: Run workload in multiple threads, use parameters['num_worker'].
   total_weight = 0.0
   weights = []
   operations = []
@@ -196,25 +210,32 @@ def RunWorkload(database, parameters):
     weights.append(total_weight)
     latencies_ms[op_code] = []
 
-  i = 0
-  operation_count = int(parameters['operationcount'])
-  while i < operation_count:
-    i += 1
-    weight = random.uniform(0, total_weight)
-    for j in range(len(weights)):
-      if weight <= weights[j]:
-        DoOperation(database, parameters['table'], operations[j], latencies_ms)
-        break
+  threads = []
+  start = timeit.default_timer()
+  for i in range(int(parameters['num_worker'])):
+    thread = WorkloadThread(database, parameters, total_weight, weights,
+                            operations)
+    thread.start()
+    threads.append(thread)
 
-  AggregateMetrics(latencies_ms)
+  for thread in threads:
+    thread.join()
+  end = timeit.default_timer()
+
+  for thread in threads:
+    thread_latencies_ms = thread.latencies_ms()
+    for key in latencies_ms.keys():
+      latencies_ms[key].extend(thread_latencies_ms[key])
+
+  AggregateMetrics(latencies_ms, (end - start) * 1000.0,
+                   parameters['num_bucket'])
 
 
 if __name__ == '__main__':
-  print DUMMY_OUTPUT
-
   parameters = ParseOptions()
   if parameters['command'] == 'run':
     database = OpenDatabase(parameters)
+    LoadKeys(database, parameters)
     RunWorkload(database, parameters)
   else:
     raise Exception('Command %s not implemented.' % parameters['command'])

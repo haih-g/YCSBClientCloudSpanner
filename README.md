@@ -1,6 +1,7 @@
 # YCSBClientCloudSpanner
 
-Implements YCSB clients for cloud Spanner in various languages.
+Implements [YCSB](https://github.com/brianfrankcooper/YCSB) clients for cloud
+Spanner in various languages.
 
 ## Client Spec
 
@@ -72,15 +73,22 @@ bucket of latency in millisecond. See the example below.
 
 ## Binary Spec
 
-A `.tar.gz` package must be built for each client. The recommended name is
-`ycsb-<language>.tar.gz`. Once untarred, there must be an executable at
-relative path `bin/ycsb`. The package should be standalone. All dependency
-should be inlucded in the `.tar.gz` file.
+To integrate with [PerfKitBenchmarks](https://github.com/GoogleCloudPlatform/PerfKitBenchmarker),
+a `.tar.gz` package should be built for each client. The recommended name is
+`ycsb-<language>.<version>.tar.gz`. Once untarred, there must be an
+executable at relative path `bin/ycsb`. It is recommended to include all
+dependencies in the `.tar.gz` package. If there is any unincluded dependencies,
+PerfKitBenchmarker needs to install it on the VMs.
+
+### Java
+
+We use [YCSB](https://github.com/brianfrankcooper/YCSB), which is in Java, for
+the Java client.
 
 ### Python
 
 Sample command to make the Python package.
 
 ```
-$ cd py; tar -cvzf ../ycsb-python.tar.gz *; cd ..
+$ tar -cvzf ycsb-python.0.0.5.tar.gz py/*
 ```
