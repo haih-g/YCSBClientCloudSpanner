@@ -7,7 +7,7 @@ Usage:
     --num_worker=32 --noskip_spanner_setup --skip_spanner_teardown
   $ export GOOGLE_APPLICATION_CREDENTIALS=/usr/local/google/home/haih/cloud-storage-benchmarks.json
   $ export GCLOUD_PROJECT=cloud-storage-benchmarks
-  $ python py/ycsb.py run -P dist/workloada -p table=usertable \
+  $ python py/ycsb.py run -P pkb/workloada -p table=usertable \
     -p cloudspanner.instance=ycsb-542756a4 -p recordcount=5000 \
     -p operationcount=100 -p cloudspanner.database=ycsb
 

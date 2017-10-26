@@ -82,7 +82,5 @@ should be inlucded in the `.tar.gz` file.
 Sample command to make the Python package.
 
 ```
-$ pyinstall py/ycsb.py
-$ mv dist/ycsb dist/bin
-$ tar -cvzf ycsb-python.tar.gz dist/*
+$ cd py; tar -cvzf ../ycsb-python.tar.gz *; cd ..
 ```
