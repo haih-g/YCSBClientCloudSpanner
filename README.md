@@ -41,7 +41,7 @@ The client must print out to `STDOUT` the output in the YCSB output format.
 ```
 
 Where `TYPE` can be `OVERALL`, `INSERT`, `UPDATE`, `READ`, or `SCAN`, and
-must start with `OVERALL', `description` can be either a description or the
+must start with `OVERALL`, `description` can be either a description or the
 bucket of latency in millisecond. See the example below.
 
 ```
