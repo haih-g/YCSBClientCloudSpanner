@@ -76,3 +76,13 @@ A `.tar.gz` package must be built for each client. The recommended name is
 `ycsb-<language>.tar.gz`. Once untarred, there must be an executable at
 relative path `bin/ycsb`. The package should be standalone. All dependency
 should be inlucded in the `.tar.gz` file.
+
+### Python
+
+Sample command to make the Python package.
+
+```
+$ pyinstall py/ycsb.py
+$ mv dist/ycsb dist/bin
+$ tar -cvzf ycsb-python.tar.gz dist/*
+```
