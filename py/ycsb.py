@@ -66,7 +66,7 @@ def OpenDatabase(parameters):
   instance = spanner_client.instance(instance_id)
   database_id = parameters['cloudspanner.database']
   pool = spanner.BurstyPool(int(parameters['num_worker']))
-  database = instance.database(database_id, pool)
+  database = instance.database(database_id, pool=pool)
 
   return database
 
