@@ -65,7 +65,8 @@ def OpenDatabase(parameters):
   instance_id = parameters['cloudspanner.instance']
   instance = spanner_client.instance(instance_id)
   database_id = parameters['cloudspanner.database']
-  database = instance.database(database_id)
+  pool = spanner.BurstyPool(int(parameters['num_worker']))
+  database = instance.database(database_id, pool)
 
   return database
 
@@ -82,12 +83,13 @@ def LoadKeys(database, parameters):
 
 def Read(database, table, key):
   """Does a single read operation."""
-  result = database.execute_sql('SELECT u.* FROM %s u WHERE u.id="%s"' %
-                                (table, key))
-  for row in result:
-    key = row[0]
-    for i in range(10):
-      field = row[i + 1]
+  with database.snapshot() as snapshot:
+    result = snapshot.execute_sql('SELECT u.* FROM %s u WHERE u.id="%s"' %
+                                  (table, key))
+    for row in result:
+      key = row[0]
+      for i in range(10):
+        field = row[i + 1]
 
 
 def Update(database, table, key):
