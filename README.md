@@ -32,6 +32,7 @@ Client must understand the following flags:
    while in node.js, it's number of EventHandlers (all sharing a single thread).
 1. `recordcount`: Number of records.
 1. `operationcount`: Number of operations.
+1. `cloudspanner.channels`: Number of cloud Spanner channles to use.
 
 ### Output
 
@@ -55,6 +56,7 @@ bucket of latency in millisecond. See the example below.
 [INSERT], MaxLatency(us), 5103261
 [INSERT], 95thPercentileLatency(us), 143000
 [INSERT], 99thPercentileLatency(us), 253000
+[INSERT], 99.9thPercentileLatency(us), 660000
 [INSERT], Return=OK, 50000
 [INSERT], 0, 0
 [INSERT], 1, 0

@@ -5,11 +5,11 @@ Usage:
   $ testing/performance/cloud_benchmarks/scripts/cloud_spanner_client.sh \
     --ycsb_record_count=50000 --ycsb_operation_count=200000 --client_type=java \
     --num_worker=32 --noskip_spanner_setup --skip_spanner_teardown
-  $ export GOOGLE_APPLICATION_CREDENTIALS=/usr/local/google/home/haih/cloud-storage-benchmarks.json
-  $ export GCLOUD_PROJECT=cloud-storage-benchmarks
+  $ export GOOGLE_APPLICATION_CREDENTIALS=/usr/local/google/home/haih/cloud-spanner-client-benchmark.json
+  $ export GCLOUD_PROJECT=cloud-spanner-client-benchmark
   $ python py/ycsb.py run -P pkb/workloada -p table=usertable \
     -p cloudspanner.instance=ycsb-542756a4 -p recordcount=5000 \
-    -p operationcount=100 -p cloudspanner.database=ycsb
+    -p operationcount=100 -p cloudspanner.database=ycsb -p num_worker=1
 
 """
 
@@ -82,8 +82,12 @@ def LoadKeys(database, parameters):
 
 def Read(database, table, key):
   """Does a single read operation."""
-  result = database.execute_sql('SELECT u.* FROM %s u WHERE u.key="%s"' %
+  result = database.execute_sql('SELECT u.* FROM %s u WHERE u.id="%s"' %
                                 (table, key))
+  for row in result:
+    key = row[0]
+    for i in range(10):
+      field = row[i + 1]
 
 
 def Update(database, table, key):
@@ -152,6 +156,9 @@ def AggregateMetrics(latencies_ms, duration_ms, num_bucket):
     print '[%s], 99thPercentileLatency(us), %f' % (
         operation_upper,
         numpy.percentile(latencies_ms[operation], 99.0) * 1000.0)
+    print '[%s], 99.9thPercentileLatency(us), %f' % (
+        operation_upper,
+        numpy.percentile(latencies_ms[operation], 99.9) * 1000.0)
     print '[%s], Return=OK, %d' % (operation_upper, op_counts[operation])
     latency_array = numpy.array(latencies_ms[operation])
     for j in range(num_bucket):
@@ -234,6 +241,8 @@ def RunWorkload(database, parameters):
 if __name__ == '__main__':
   parameters = ParseOptions()
   if parameters['command'] == 'run':
+    if 'cloudspanner.channels' in parameters:
+      assert parameters['command'] == 1, 'Python doesn\'t support channels > 1.'
     database = OpenDatabase(parameters)
     LoadKeys(database, parameters)
     RunWorkload(database, parameters)
