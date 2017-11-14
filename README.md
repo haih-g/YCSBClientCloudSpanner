@@ -21,7 +21,7 @@ Client must read the following parameters from the workload file.
 3. `scanproportion`
 4. `insertproportion`
 
-Client must understand the following flags:
+Client must understand the following flags specified using ```[-p key=value]```:
 1. `table`: The table to use in the benchmark.
 1. `cloudspanner.instance`: The cloud Spanner instance to use.
 1. `cloudspanner.database`: The cloud Spanner database to use.
