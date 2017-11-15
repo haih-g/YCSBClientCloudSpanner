@@ -244,7 +244,8 @@ if __name__ == '__main__':
   parameters = ParseOptions()
   if parameters['command'] == 'run':
     if 'cloudspanner.channels' in parameters:
-      assert parameters['command'] == 1, 'Python doesn\'t support channels > 1.'
+      assert parameters['cloudspanner.channels'] == 1, ('Python doesn\'t '
+                                                        'support channels > 1.')
     database = OpenDatabase(parameters)
     LoadKeys(database, parameters)
     RunWorkload(database, parameters)
