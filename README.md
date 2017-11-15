@@ -34,6 +34,19 @@ Client must understand the following flags specified using ```[-p key=value]```:
 1. `operationcount`: Number of operations.
 1. `cloudspanner.channels`: Number of cloud Spanner channles to use.
 
+Client must be albe ignore unknown arguments or flags. The real command can be:
+
+```
+<binary> run cloudspanner -P /opt/pkb/workloada \
+  -p cloudspanner.host=https://spanner.googleapis.com/ \
+  -p cloudspanner.instance=ycsb-bb9e6936 \
+  -p cloudspanner.project=cloud-spanner-client-benchmark \
+  -p client_type=dotnet -p threads=32 -p zeropadding=12 \
+  -p num_worker=32 -p target=None -p measurementtype=histogram \
+  -p table=usertable -p operationcount=200000 -p recordcount=50000 \
+  -p cloudspanner.database=ycsb -p maxexecutiontime=1800
+```
+
 ### Output
 
 The client must print out to `STDOUT` the output in the YCSB output format.
