@@ -82,6 +82,7 @@ class SpannerOps {
                 }
             $arrbatch[] = $arrFields;
             }
+        array_multisort($arrBatch);
         $time_start = microtime(true);
         $operation = $database->transaction(['singleUse' => true])->insertBatch($table, $arrBatch)->commit();
         return microtime(true) - $time_start;
