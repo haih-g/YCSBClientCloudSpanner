@@ -100,6 +100,14 @@ PerfKitBenchmarker needs to install it on the VMs.
 We use [YCSB](https://github.com/brianfrankcooper/YCSB), which is in Java, for
 the Java client.
 
+### Node.js
+
+Sample command to make Node package.
+
+```sh
+$ tar -cvzf ycsb-node.0.0.5.tar.gz node/*
+```
+
 ### Python
 
 Sample command to make the Python package.

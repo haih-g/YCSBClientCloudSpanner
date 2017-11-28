@@ -1,0 +1,27 @@
+{
+  "name": "ycsb-client-cloud-spanner",
+  "description": "YCSB NodeJS client for Cloud Spanner",
+  "license": "Apache-2.0",
+  "author": "Google Inc.",
+  "engines": {
+    "node": ">=6"
+  },
+  "repository": "haih-g/YCSBClientCloudSpanner",
+  "main": "workload.js",
+  "bin": {
+    "ycsb": "./bin/ycsb"
+  },
+  "scripts": {
+    "run": "node ./bin/ycsb run -P ../pkb/workloada -p table=usertable -p cloudspanner.instance=ycsb-instance -p operationcount=100 -p cloudspanner.database=ycsb"
+  },
+  "dependencies": {
+    "@google-cloud/spanner": "^0.8.0",
+    "binary-search-bounds": "^2.0.3",
+    "dedent": "^0.7.0",
+    "lodash.random": "^3.2.0",
+    "p-queue": "^2.3.0",
+    "stats-lite": "^2.1.0",
+    "time-span": "^2.0.0",
+    "yargs": "^10.0.3"
+  }
+}
