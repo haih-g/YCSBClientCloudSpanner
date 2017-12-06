@@ -12,40 +12,70 @@ use Symfony\Component\Console\Input\InputDefinition;
 require __DIR__ . '/vendor/autoload.php';
 /*
 Uasge:
-php ycsb.php --instance=ycsb-bb9e6936 --database=ycsb table=usertable [--key=user1100197033673136279] --opcount=1 --perform=[LoadKeys|PerformRead|Update]
+php ycsb.php --instance=ycsb-bb9e6936 --database=ycsb table=usertable [--key=user1100197033673136279] --operationcount=1 --perform=[LoadKeys|PerformRead|Update]
 */
 
 $msg = "";
+$arrKEYS = [];
+$arrOPERATIONS = ['readproportion', 'updateproportion', 'scanproportion', 'insertproportion'];
+
 
 // Was going to try to multi thread, but Thread class is considered very dangerous in a CLI
 // environment.  To multi-thread, please incorporate class into a PHP web page and make multiple
 // calls to the same page.
-//class SpannerOps extends Thread {
-class SpannerOps {    
+//class WorkloadThread extends Thread {
+class WorkloadThread {    
     // It is assumed that all calls are going out the same GRPC connection.
     // Please clarify if each thread should spawn its own GRPC.
     
-    public function __construct() {
-        //$this->testfunc = $test;
+    public $_database;
+    public $_arrParameters;
+    public $_fltTotalWeight;
+    public $_arrWeights;
+    public $_arrOperations;
+    
+    public function __construct($database, $arrParameters, $fltTotalWeight, $arrWeights, $arrOperations) {
+        // Sorry, single threaded only
+        $this->_database = $database;
+        $this->_arrParameters = $arrParameters;
+        $this->_fltTotalWeight = $fltTotalWeight;
+        $this->_arrWeights = $arrWeights;
+        $this->_arrOperations = $arrOperations;
         }
 
-    public function LoadKeys($database, $options) {
-        global $KEYS;
-        $KEYS = array();
+    public function run() {
+        // Run a single thread of the workload
+        $i = 0;
+		$intOperationCount = (int)$this->_arrParameters['operationcount'];
+        while ($i < $intOperationCount) {
+            $i += 1;
+            $fltWeight = rand(0, $this->_fltTotalWeight);
+            for ($j=0;$j<count($this->_arrWeights);$j++) {
+                if ($fltWeight <= $this->_arrWeights[j]) {
+                    $this->DoOperation();
+					break;
+                    }
+                }
+            }
+        }
+
+    public function LoadKeys($database, $arrParameters) {
+        global $arrKEYS;
+        $arrKEYS = array();
 	$time_start = microtime(true);
         $snapshot = $database->snapshot();
         // Kind of assuming that id is ubiquitous...
-        $results = $snapshot->execute('SELECT id FROM ' . $options['table']);
+        $results = $snapshot->execute('SELECT id FROM ' . $arrParameters['table']);
          foreach ($results as $row) {
-            $KEYS[] = $row['id'];
+            $arrKEYS[] = $row['id'];
             }
 	return microtime(true) - $time_start;
         }
 
     public function PerformRead($database, $table, $key) {
         //Changed named to PerformRead because Read is a reserved keyword.
-        global $KEYS;
-        $KEYS = array();
+        global $arrKEYS;
+        $arrKEYS = array();
 	$time_start = microtime(true);
         $snapshot = $database->snapshot();
         // Kind of assuming that id is ubiquitous...
@@ -63,13 +93,13 @@ class SpannerOps {
     public function Update($database, $table, $key) {
         // Does a single update operation.
         $field = rand(0,9);
-	$time_start = microtime(true);
+        $time_start = microtime(true);
         $operation = $database->transaction(['singleUse' => true])
             ->updateBatch($table, [
                 ['id' => $key, "field".$field => $this->randString(false, 100)],
                 ])
             ->commit();
-	return microtime(true) - $time_start;
+        return microtime(true) - $time_start;
         }
 
     public function Insert($database, $table, $incount) {
@@ -86,6 +116,12 @@ class SpannerOps {
         $time_start = microtime(true);
         $operation = $database->transaction(['singleUse' => true])->insertBatch($table, $arrBatch)->commit();
         return microtime(true) - $time_start;
+        }
+
+    public function DoOperation($database, $table, $operation) {
+    
+    
+            
         }
 
     public function randString($num, $len) {
@@ -112,7 +148,7 @@ class SpannerOps {
 function parseCliOptions() {
     $longopts = array(
         "recordcount::",
-        "opcount:",
+        "operationcount:",
         "clienttype::",
         "numworker::",
         "instance:",
@@ -120,19 +156,31 @@ function parseCliOptions() {
         "table:",
         "perform:",
         "noskip_spanner_setup::",
-	"skip_spanner_teardown::",
+        "skip_spanner_teardown::",
         "key::",
+		"workload",
         );
-    $options = getopt("", $longopts);
-    // Now we have things like $options["num_worker"]
-    return $options;
+    $arrParameters = getopt("", $longopts);
+    // Now we have things like $arrParameters["num_worker"]
+
+	$myfile = fopen($arrParameters['workload'], "r") or die("Unable to open file!");
+    while ($line = fgets($myfile)) {
+        $parts = explode("=", $line);
+	    $key = trim($parts[0]);
+		if (in_array($key, $arrOPERATIONS)) {
+            $option[$key] = trim($parts[1]);
+            }
+        }
+	fclose($myfile);
+	
+    return $arrParameters;
     }
 
-function OpenDatabase($options) {
+function OpenDatabase($arrParameters) {
     //global $database;
     $spanner = new SpannerClient();
-    $instance = $spanner->instance($options['instance']);
-    $database = $instance->database($options['database']);
+    $instance = $spanner->instance($arrParameters['instance']);
+    $database = $instance->database($arrParameters['database']);
     return $database;
     }
 
@@ -147,44 +195,67 @@ function ReportSwitch($strMsg) {
         }
 }
 
+function RunWorkload($database, $parameters) {
+    $fltTotalWeight = 0.0;
+    $arrWeights = [];
+    $arrOperations = [];
+    $latencies_ms = [];
+    foreach($arrOPERATIONS as $operation) {
+        $weight = (float)$parameters[$operation];
+        if ($weight <= 0.0) continue;
+        $fltTotalWeight += $weight;
+        $op_code = explode('proportion', $operation);
+        $arrOperations[] = $op_code[0];
+        $arrWeights[] = $fltTotalWeight;
+        $latencies_ms[$op_code] = [];
+        }
+	$time_start = microtime(true);
+    Workload($database, $parameters, $fltTotalWeight, $arrWeights, $arrOperations);
+    $time_end = microtime(true) - $time_start;
+    // Unfortunately, latencies not stored and reported like in the original script.
+    // AggregateMetrics(latencies_ms, (end - start) * 1000.0, parameters['num_bucket']);
+}
+
+
+
 // Allow for calling from a webserver
 if (php_sapi_name() == 'cli') {
-    $options = parseCliOptions();
+    $arrParameters = parseCliOptions();
     reportSwitch("Called from command line.\n");
     }
 else {
-    $options = parseQueryStringOptions();
+    $arrParameters = parseQueryStringOptions();
     reportSwitch("Called from web browser.\n");
     }
 
-foreach ($options as $opKey => $opVal) {
+foreach ($arrParameters as $opKey => $opVal) {
     reportSwitch("$opKey value is $opVal.\n");
     }
 
-$testOp = new SpannerOps();
+$testOp = new WorkloadThread();
 
-reportSwitch("Connecting to " . $options['database'] . "\n");
+reportSwitch("Connecting to " . $arrParameters['database'] . "\n");
 
 // Initial connection
 $time_start = microtime(true);
-$database = OpenDatabase($options);
+$database = OpenDatabase($arrParameters);
 $time_exec = microtime(true) - $time_start;
-reportSwitch("Connected to " . $options['database'] . " in $time_exec seconds.\n");
+reportSwitch("Connected to " . $arrParameters['database'] . " in $time_exec seconds.\n");
 
 
-for ($cntYCSB = 0; $cntYCSB < $options['opcount']; $cntYCSB++) {
-    switch ($options['perform']) {
+for ($cntYCSB = 0; $cntYCSB < $arrParameters['operationcount']; $cntYCSB++) {
+    switch ($arrParameters['perform']) {
         case "LoadKeys":
-            reportSwitch("Loaded keys in ".$testOp->LoadKeys($database, $options)." seconds. \n");
+            reportSwitch("Loaded keys in ".$testOp->LoadKeys($database, $arrParameters)." seconds. \n");
             break;
         case "PerformRead":
-            reportSwitch("Performed Read in ".$testOp->PerformRead($database, $options['table'],"user1100197033673136279")." seconds.\n");
+            reportSwitch("Performed Read in ".$testOp->PerformRead($database, $arrParameters['table'],"user1100197033673136279")." seconds.\n");
             break;
         case "Update":
-            reportSwitch("Updated Key Val in ".$testOp->Update($database, $options['table'],"user1100197033673136279")." seconds.\n");
+            reportSwitch("Updated Key Val in ".$testOp->Update($database, $arrParameters['table'],"user1100197033673136279")." seconds.\n");
             break;
         case "Insert":
-            reportSwitch("Inserted {$options['recordcount']} records into {$options['table']} in ".$testOp->Insert($database, $options['table'],$options['recordcount'])." seconds.\n");
+            reportSwitch("Inserted {$arrParameters['recordcount']} records into {$arrParameters['table']} in ".$testOp->Insert($database, $arrParameters['table'],$arrParameters['recordcount'])." seconds.\n");
             break;
         default:
             break;
