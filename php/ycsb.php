@@ -51,25 +51,12 @@ class WorkloadThread {
             $i += 1;
             $fltWeight = rand(0, $this->_fltTotalWeight);
             for ($j=0;$j<count($this->_arrWeights);$j++) {
-                if ($fltWeight <= $this->_arrWeights[j]) {
-                    $this->DoOperation();
+                if ($fltWeight <= $this->_arrWeights[$j]) {
+                    $this->DoOperation($this->_database, $this->_arrParameters['table'], $this->_arrOperations[$j]);
 					break;
                     }
                 }
             }
-        }
-
-    public function LoadKeys($database, $arrParameters) {
-        global $arrKEYS;
-        $arrKEYS = array();
-	$time_start = microtime(true);
-        $snapshot = $database->snapshot();
-        // Kind of assuming that id is ubiquitous...
-        $results = $snapshot->execute('SELECT id FROM ' . $arrParameters['table']);
-         foreach ($results as $row) {
-            $arrKEYS[] = $row['id'];
-            }
-	return microtime(true) - $time_start;
         }
 
     public function PerformRead($database, $table, $key) {
@@ -118,10 +105,30 @@ class WorkloadThread {
         return microtime(true) - $time_start;
         }
 
+    public function Scan($database, $table, $incount) {
+
+        }
+
     public function DoOperation($database, $table, $operation) {
-    
-    
-            
+        global $arrKeys;
+        $key = $arrKeys[array_rand($arrKeys)];
+        // Start timer
+        switch ($operation) {
+            case 'read':
+                $this->PerformRead($database, $arrParameters['table'],$key);
+                break;
+            case 'update':
+                $this->Update($database, $arrParameters['table'],$key);
+                break;
+            case 'insert':
+                $this>Insert($database, $arrParameters['table'],$arrParameters['recordcount'])
+                break;
+            case 'scan':
+                $this->Scan($database, $table, $key);
+                break;
+            default:
+                break;
+            }
         }
 
     public function randString($num, $len) {
@@ -176,6 +183,19 @@ function parseCliOptions() {
     return $arrParameters;
     }
 
+public function LoadKeys($database, $arrParameters) {
+    global $arrKEYS;
+    $arrKEYS = array();
+    $time_start = microtime(true);
+    $snapshot = $database->snapshot();
+    // Kind of assuming that id is ubiquitous...
+    $results = $snapshot->execute('SELECT id FROM ' . $arrParameters['table']);
+    foreach ($results as $row) {
+        $arrKEYS[] = $row['id'];
+        }
+	return microtime(true) - $time_start;
+    }
+
 function OpenDatabase($arrParameters) {
     //global $database;
     $spanner = new SpannerClient();
@@ -193,7 +213,7 @@ function ReportSwitch($strMsg) {
         // Otherwise, if it is being called from a browser, aggregate into a message.
         $msg .= $strMsg;
         }
-}
+    }
 
 function RunWorkload($database, $parameters) {
     $fltTotalWeight = 0.0;
@@ -210,11 +230,12 @@ function RunWorkload($database, $parameters) {
         $latencies_ms[$op_code] = [];
         }
 	$time_start = microtime(true);
-    Workload($database, $parameters, $fltTotalWeight, $arrWeights, $arrOperations);
+	$testOp = new WorkloadThread();
+    $testOp->Workload($database, $parameters, $fltTotalWeight, $arrWeights, $arrOperations);
     $time_end = microtime(true) - $time_start;
     // Unfortunately, latencies not stored and reported like in the original script.
     // AggregateMetrics(latencies_ms, (end - start) * 1000.0, parameters['num_bucket']);
-}
+    }
 
 
 
@@ -232,7 +253,6 @@ foreach ($arrParameters as $opKey => $opVal) {
     reportSwitch("$opKey value is $opVal.\n");
     }
 
-$testOp = new WorkloadThread();
 
 reportSwitch("Connecting to " . $arrParameters['database'] . "\n");
 
@@ -241,26 +261,10 @@ $time_start = microtime(true);
 $database = OpenDatabase($arrParameters);
 $time_exec = microtime(true) - $time_start;
 reportSwitch("Connected to " . $arrParameters['database'] . " in $time_exec seconds.\n");
+reportSwitch("Loaded keys in ".LoadKeys($database, $arrParameters)." seconds. \n");
 
+RunWorkload($database, $arrParameters);
 
-for ($cntYCSB = 0; $cntYCSB < $arrParameters['operationcount']; $cntYCSB++) {
-    switch ($arrParameters['perform']) {
-        case "LoadKeys":
-            reportSwitch("Loaded keys in ".$testOp->LoadKeys($database, $arrParameters)." seconds. \n");
-            break;
-        case "PerformRead":
-            reportSwitch("Performed Read in ".$testOp->PerformRead($database, $arrParameters['table'],"user1100197033673136279")." seconds.\n");
-            break;
-        case "Update":
-            reportSwitch("Updated Key Val in ".$testOp->Update($database, $arrParameters['table'],"user1100197033673136279")." seconds.\n");
-            break;
-        case "Insert":
-            reportSwitch("Inserted {$arrParameters['recordcount']} records into {$arrParameters['table']} in ".$testOp->Insert($database, $arrParameters['table'],$arrParameters['recordcount'])." seconds.\n");
-            break;
-        default:
-            break;
-        }
-    }
 
 if ($msg !="") print $msg;
 
