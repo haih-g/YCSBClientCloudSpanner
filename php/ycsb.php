@@ -12,7 +12,7 @@ use Symfony\Component\Console\Input\InputDefinition;
 require __DIR__ . '/vendor/autoload.php';
 /*
 Uasge:
-php ycsb.php --instance=ycsb-bb9e6936 --database=ycsb table=usertable [--key=user1100197033673136279] --operationcount=1 --perform=[LoadKeys|PerformRead|Update]
+php ycsb.php --instance=ycsb-bb9e6936 --database=ycsb table=usertable --operationcount=1 
 */
 
 $msg = "";
@@ -61,20 +61,14 @@ class WorkloadThread {
 
     public function PerformRead($database, $table, $key) {
         //Changed named to PerformRead because Read is a reserved keyword.
-        global $arrKEYS;
-        $arrKEYS = array();
-	$time_start = microtime(true);
+	      $time_start = microtime(true);
         $snapshot = $database->snapshot();
         // Kind of assuming that id is ubiquitous...
         $results = $snapshot->execute("SELECT * FROM $table where id = '$key'");
-        /*
         foreach ($results as $row) {
-            // Not sure why the original Python script does this.
-            // We don't really need to parse results.
             $key = $row[0];
             }
-	*/
-	return microtime(true) - $time_start;
+	      return microtime(true) - $time_start;
         }
 
     public function Update($database, $table, $key) {
@@ -89,42 +83,41 @@ class WorkloadThread {
         return microtime(true) - $time_start;
         }
 
-    public function Insert($database, $table, $incount) {
+    public function Insert($database, $table) {
         $arrBatch = [];  //array of $arrFields
         $arrFields = [];
-        for ($rCount = 0; $rCount < $incount; $rCount++) {
-            $arrFields["id"] = "user4" . $this->randString(true, 17);
-            for ($f = 0; $f < 10; $f++) {
-                $arrFields["field".$f] = $this->randString(false, 100);
-                }
-            $arrbatch[] = $arrFields;
+        $arrFields["id"] = "user4" . $this->randString(true, 17);
+        for ($f = 0; $f < 10; $f++) {
+            $arrFields["field".$f] = $this->randString(false, 100);
             }
+        $arrbatch[] = $arrFields;
         array_multisort($arrBatch);
         $time_start = microtime(true);
         $operation = $database->transaction(['singleUse' => true])->insertBatch($table, $arrBatch)->commit();
         return microtime(true) - $time_start;
         }
 
-    public function Scan($database, $table, $incount) {
+    public function Scan($database, $table) {
 
         }
 
     public function DoOperation($database, $table, $operation) {
-        global $arrKeys;
-        $key = $arrKeys[array_rand($arrKeys)];
+        global $arrKEYS;
+        $key = $arrKEYS[array_rand($arrKEYS)];
+        print "\nKey is $key.\n";
         // Start timer
         switch ($operation) {
             case 'read':
-                $this->PerformRead($database, $arrParameters['table'],$key);
+                ReportSwitch($this->PerformRead($database, $table, $key));
                 break;
             case 'update':
-                $this->Update($database, $arrParameters['table'],$key);
+                ReportSwitch($this->Update($database, $table, $key));
                 break;
             case 'insert':
-                $this>Insert($database, $arrParameters['table'],$arrParameters['recordcount'])
+                ReportSwitch($this>Insert($database, $table));
                 break;
             case 'scan':
-                $this->Scan($database, $table, $key);
+                ReportSwitch($this->Scan($database, $table, $key));
                 break;
             default:
                 break;
@@ -143,53 +136,46 @@ class WorkloadThread {
             }
         return $strRand;
         }
-
-    /* If we were going to use Threads, Threads would require us to have run() function
-    public function run() {
-        }
-    */
     }
 
 
 //Lives outside the class because it will only potentially be called once.
 function parseCliOptions() {
+    global $arrOPERATIONS;
+
     $longopts = array(
         "recordcount::",
         "operationcount:",
         "clienttype::",
-        "numworker::",
         "instance:",
         "database:",
         "table:",
-        "perform:",
         "noskip_spanner_setup::",
         "skip_spanner_teardown::",
-        "key::",
-		"workload",
+        "workload:",
         );
     $arrParameters = getopt("", $longopts);
     // Now we have things like $arrParameters["num_worker"]
 
-	$myfile = fopen($arrParameters['workload'], "r") or die("Unable to open file!");
+	  $myfile = fopen($arrParameters['workload'], "r") or die("Unable to open file!");
     while ($line = fgets($myfile)) {
         $parts = explode("=", $line);
-	    $key = trim($parts[0]);
-		if (in_array($key, $arrOPERATIONS)) {
-            $option[$key] = trim($parts[1]);
+	      $key = trim($parts[0]);
+		    if (in_array($key, $arrOPERATIONS)) {
+            $arrParameters[$key] = trim($parts[1]);
             }
         }
-	fclose($myfile);
-	
+    fclose($myfile);
     return $arrParameters;
     }
 
-public function LoadKeys($database, $arrParameters) {
+function LoadKeys($database, $arrParameters) {
     global $arrKEYS;
     $arrKEYS = array();
     $time_start = microtime(true);
     $snapshot = $database->snapshot();
     // Kind of assuming that id is ubiquitous...
-    $results = $snapshot->execute('SELECT id FROM ' . $arrParameters['table']);
+    $results = $snapshot->execute("SELECT id FROM {$arrParameters['table']} limit 100");
     foreach ($results as $row) {
         $arrKEYS[] = $row['id'];
         }
@@ -216,6 +202,7 @@ function ReportSwitch($strMsg) {
     }
 
 function RunWorkload($database, $parameters) {
+    global $arrOPERATIONS;
     $fltTotalWeight = 0.0;
     $arrWeights = [];
     $arrOperations = [];
@@ -227,14 +214,15 @@ function RunWorkload($database, $parameters) {
         $op_code = explode('proportion', $operation);
         $arrOperations[] = $op_code[0];
         $arrWeights[] = $fltTotalWeight;
-        $latencies_ms[$op_code] = [];
+        //$latencies_ms[$op_code] = [];
         }
-	$time_start = microtime(true);
-	$testOp = new WorkloadThread();
-    $testOp->Workload($database, $parameters, $fltTotalWeight, $arrWeights, $arrOperations);
+	  $time_start = microtime(true);
+	  $testOp = new WorkloadThread($database, $parameters, $fltTotalWeight, $arrWeights, $arrOperations);
+    $testOp->run();
     $time_end = microtime(true) - $time_start;
     // Unfortunately, latencies not stored and reported like in the original script.
     // AggregateMetrics(latencies_ms, (end - start) * 1000.0, parameters['num_bucket']);
+    reportSwitch("Operation run time: $time_end ms.");
     }
 
 
