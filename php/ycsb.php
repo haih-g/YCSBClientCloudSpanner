@@ -33,7 +33,8 @@ class WorkloadThread {
     public $_fltTotalWeight;
     public $_arrWeights;
     public $_arrOperations;
-    
+    public $_arrLatency;
+
     public function __construct($database, $arrParameters, $fltTotalWeight, $arrWeights, $arrOperations) {
         // Sorry, single threaded only
         $this->_database = $database;
@@ -41,6 +42,7 @@ class WorkloadThread {
         $this->_fltTotalWeight = $fltTotalWeight;
         $this->_arrWeights = $arrWeights;
         $this->_arrOperations = $arrOperations;
+        $this->_arrLatency = [];
         }
 
     public function run() {
@@ -49,11 +51,12 @@ class WorkloadThread {
 		$intOperationCount = (int)$this->_arrParameters['operationcount'];
         while ($i < $intOperationCount) {
             $i += 1;
-            $fltWeight = rand(0, $this->_fltTotalWeight);
+            $fltWeight = (float)rand(0, $this->_fltTotalWeight*10000)/10000.0;
+            //print "Randomizer is $fltWeight out of {$this->_fltTotalWeight} \n";
             for ($j=0;$j<count($this->_arrWeights);$j++) {
                 if ($fltWeight <= $this->_arrWeights[$j]) {
                     $this->DoOperation($this->_database, $this->_arrParameters['table'], $this->_arrOperations[$j]);
-					break;
+                    break;
                     }
                 }
             }
@@ -66,7 +69,7 @@ class WorkloadThread {
         // Kind of assuming that id is ubiquitous...
         $results = $snapshot->execute("SELECT * FROM $table where id = '$key'");
         foreach ($results as $row) {
-            $key = $row[0];
+            $key = $row;
             }
 	      return microtime(true) - $time_start;
         }
@@ -97,30 +100,41 @@ class WorkloadThread {
         return microtime(true) - $time_start;
         }
 
-    public function Scan($database, $table) {
+    public function Scan($database, $table, $key) {
 
         }
 
     public function DoOperation($database, $table, $operation) {
         global $arrKEYS;
+        global $arrLatency;
         $key = $arrKEYS[array_rand($arrKEYS)];
-        print "\nKey is $key.\n";
-        // Start timer
         switch ($operation) {
             case 'read':
-                ReportSwitch($this->PerformRead($database, $table, $key));
+                $optime = $this->PerformRead($database, $table, $key);
                 break;
             case 'update':
-                ReportSwitch($this->Update($database, $table, $key));
+                $optime = $this->Update($database, $table, $key);
                 break;
             case 'insert':
-                ReportSwitch($this>Insert($database, $table));
+                $optime = $this>Insert($database, $table);
                 break;
             case 'scan':
-                ReportSwitch($this->Scan($database, $table, $key));
+                $optime = $this->Scan($database, $table, $key);
                 break;
             default:
                 break;
+            }
+        //ReportSwitch("--- $operation performed in $optime seconds.\n");
+        $arrLatency[$operation][] = $optime;
+        }
+
+    public function AggregateMetrics($duration, $numbucket) {
+        global $arrLatency;
+        $OverallOpCount = 0;
+        $arrOpCounts = [];
+        foreach($arrLatency as $opKey => $arrDurations) {
+            $arrOpCounts[$opKey] = count($arrDurations);
+            $OverallOpCount += $arrOpCounts[$opKey];
             }
         }
 
@@ -169,13 +183,61 @@ function parseCliOptions() {
     return $arrParameters;
     }
 
+function average($arrParam) {
+    return array_sum($arrParam)/count($arrParam);
+    }
+
+function stanDev($arrParam) {
+    $mean = average($arrParam);
+    foreach($arrParam as $key => $val) {
+        $arrParam[$key] = pow($val-$mean, 2);
+        }
+    return sqrt(average($arrParam));
+    }
+
+function percentile($arrParam, $pct) {
+    sort($arrParam);
+    $i = floor($pct*count($arrParam));
+    return $arrParam[$i];
+    }
+
+function AggregateMetrics($duration) {
+    global $arrLatency;
+    $OverallOpCount = 0;
+    $arrOpCounts = [];
+    foreach ($arrLatency as $opKey => $arrDurations) {
+        $arrOpCounts[$opKey] = count($arrDurations);
+        $OverallOpCount += $arrOpCounts[$opKey];
+        }
+    $r = $OverallOpCount/$duration*1000;
+    reportSwitch("Throughput (Ops/sec), $r \n");
+    foreach($arrOpCounts as $opKey => $intOpCounts) {
+        $strUpperOp = strtoupper($opKey);
+        reportSwitch("[$strUpperOp], Operations: $intOpCounts. \n");
+        $r = average($arrLatency[$opKey])*1000;
+        reportSwitch("[$strUpperOp], AverageLatency(us) $r \n");
+        $r = stanDev($arrLatency[$opKey])*1000;
+        reportSwitch("[$strUpperOp], LatencyVariance(us) $r \n");
+        $r = min($arrLatency[$opKey])*1000;
+        reportSwitch("[$strUpperOp], MinLatency(us) $r \n");
+        $r = max($arrLatency[$opKey])*1000;
+        reportSwitch("[$strUpperOp], MaxLatency(us) $r \n");
+        $r = percentile($arrLatency[$opKey], 0.95)*1000;
+        reportSwitch("[$strUpperOp], 95thPercentile(us) $r \n");
+        $r = percentile($arrLatency[$opKey], 0.99)*1000;
+        reportSwitch("[$strUpperOp], 99thPercentile(us) $r \n");
+        $r = percentile($arrLatency[$opKey], 0.999)*1000;
+        reportSwitch("[$strUpperOp], 99.9thPercentile(us) $r \n");
+        }
+    }
+
 function LoadKeys($database, $arrParameters) {
     global $arrKEYS;
     $arrKEYS = array();
     $time_start = microtime(true);
     $snapshot = $database->snapshot();
-    // Kind of assuming that id is ubiquitous...
-    $results = $snapshot->execute("SELECT id FROM {$arrParameters['table']} limit 100");
+    // Kind of assuming that id is always name of PK in whatever table you choose
+    $results = $snapshot->execute("SELECT id FROM {$arrParameters['table']}");
     foreach ($results as $row) {
         $arrKEYS[] = $row['id'];
         }
@@ -206,23 +268,26 @@ function RunWorkload($database, $parameters) {
     $fltTotalWeight = 0.0;
     $arrWeights = [];
     $arrOperations = [];
-    $latencies_ms = [];
+    $arrLatency = [];
     foreach($arrOPERATIONS as $operation) {
+        //print "Setting Weight of $operation to {$parameters[$operation]} \n";
         $weight = (float)$parameters[$operation];
         if ($weight <= 0.0) continue;
         $fltTotalWeight += $weight;
         $op_code = explode('proportion', $operation);
         $arrOperations[] = $op_code[0];
         $arrWeights[] = $fltTotalWeight;
-        //$latencies_ms[$op_code] = [];
+        $arrLatency[$op_code[0]] = [];
         }
 	  $time_start = microtime(true);
 	  $testOp = new WorkloadThread($database, $parameters, $fltTotalWeight, $arrWeights, $arrOperations);
     $testOp->run();
     $time_end = microtime(true) - $time_start;
     // Unfortunately, latencies not stored and reported like in the original script.
-    // AggregateMetrics(latencies_ms, (end - start) * 1000.0, parameters['num_bucket']);
-    reportSwitch("Operation run time: $time_end ms.");
+    // AggregateMetrics(arrLatency, (end - start) * 1000.0, parameters['num_bucket']);
+    reportSwitch("Operation run time: $time_end ms\n");
+    AggregateMetrics($time_end);
+
     }
 
 
@@ -238,7 +303,7 @@ else {
     }
 
 foreach ($arrParameters as $opKey => $opVal) {
-    reportSwitch("$opKey value is $opVal.\n");
+    reportSwitch("$opKey value is $opVal\n");
     }
 
 
@@ -248,8 +313,8 @@ reportSwitch("Connecting to " . $arrParameters['database'] . "\n");
 $time_start = microtime(true);
 $database = OpenDatabase($arrParameters);
 $time_exec = microtime(true) - $time_start;
-reportSwitch("Connected to " . $arrParameters['database'] . " in $time_exec seconds.\n");
-reportSwitch("Loaded keys in ".LoadKeys($database, $arrParameters)." seconds. \n");
+reportSwitch("Connected to " . $arrParameters['database'] . " in $time_exec seconds\n");
+reportSwitch("Loaded keys in ".LoadKeys($database, $arrParameters)." seconds\n");
 
 RunWorkload($database, $arrParameters);
 
