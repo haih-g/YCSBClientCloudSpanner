@@ -65,9 +65,9 @@ class WorkloadThread {
     public function PerformRead($database, $table, $key) {
         //Changed named to PerformRead because Read is a reserved keyword.
 	      $time_start = microtime(true);
-        $snapshot = $database->snapshot();
+        //$snapshot = $database->snapshot();
         // Kind of assuming that id is ubiquitous...
-        $results = $snapshot->execute("SELECT * FROM $table where id = '$key'");
+        $results = $database->execute("SELECT * FROM $table where id = '$key'");
         foreach ($results as $row) {
             $key = $row;
             }
@@ -78,7 +78,7 @@ class WorkloadThread {
         // Does a single update operation.
         $field = rand(0,9);
         $time_start = microtime(true);
-        $operation = $database->transaction(['singleUse' => true])
+        $operation = $database->transaction(['singleUse' => false])
             ->updateBatch($table, [
                 ['id' => $key, "field".$field => $this->randString(false, 100)],
                 ])
@@ -126,16 +126,6 @@ class WorkloadThread {
             }
         //ReportSwitch("--- $operation performed in $optime seconds.\n");
         $arrLatency[$operation][] = $optime;
-        }
-
-    public function AggregateMetrics($duration, $numbucket) {
-        global $arrLatency;
-        $OverallOpCount = 0;
-        $arrOpCounts = [];
-        foreach($arrLatency as $opKey => $arrDurations) {
-            $arrOpCounts[$opKey] = count($arrDurations);
-            $OverallOpCount += $arrOpCounts[$opKey];
-            }
         }
 
     public function randString($num, $len) {
@@ -209,8 +199,8 @@ function AggregateMetrics($duration) {
         $arrOpCounts[$opKey] = count($arrDurations);
         $OverallOpCount += $arrOpCounts[$opKey];
         }
-    $r = $OverallOpCount/$duration*1000;
-    reportSwitch("Throughput (Ops/sec), $r \n");
+    $r = $OverallOpCount/$duration;
+    reportSwitch("[OVERALL] Throughput (Ops/sec), $r \n");
     foreach($arrOpCounts as $opKey => $intOpCounts) {
         $strUpperOp = strtoupper($opKey);
         reportSwitch("[$strUpperOp], Operations: $intOpCounts. \n");
@@ -222,6 +212,8 @@ function AggregateMetrics($duration) {
         reportSwitch("[$strUpperOp], MinLatency(us) $r \n");
         $r = max($arrLatency[$opKey])*1000;
         reportSwitch("[$strUpperOp], MaxLatency(us) $r \n");
+        $r = percentile($arrLatency[$opKey], 0.50)*1000;
+        reportSwitch("[$strUpperOp], 50thPercentile(us) $r \n");
         $r = percentile($arrLatency[$opKey], 0.95)*1000;
         reportSwitch("[$strUpperOp], 95thPercentile(us) $r \n");
         $r = percentile($arrLatency[$opKey], 0.99)*1000;
@@ -285,7 +277,7 @@ function RunWorkload($database, $parameters) {
     $time_end = microtime(true) - $time_start;
     // Unfortunately, latencies not stored and reported like in the original script.
     // AggregateMetrics(arrLatency, (end - start) * 1000.0, parameters['num_bucket']);
-    reportSwitch("Operation run time: $time_end ms\n");
+    reportSwitch("[OVERALL] Operation run time: $time_end ms\n");
     AggregateMetrics($time_end);
 
     }
@@ -295,26 +287,26 @@ function RunWorkload($database, $parameters) {
 // Allow for calling from a webserver
 if (php_sapi_name() == 'cli') {
     $arrParameters = parseCliOptions();
-    reportSwitch("Called from command line.\n");
+//    reportSwitch("Called from command line.\n");
     }
 else {
     $arrParameters = parseQueryStringOptions();
-    reportSwitch("Called from web browser.\n");
+//    reportSwitch("Called from web browser.\n");
     }
 
-foreach ($arrParameters as $opKey => $opVal) {
-    reportSwitch("$opKey value is $opVal\n");
-    }
+//foreach ($arrParameters as $opKey => $opVal) {
+//    reportSwitch("$opKey value is $opVal\n");
+//    }
 
 
-reportSwitch("Connecting to " . $arrParameters['database'] . "\n");
+//reportSwitch("Connecting to " . $arrParameters['database'] . "\n");
 
 // Initial connection
 $time_start = microtime(true);
 $database = OpenDatabase($arrParameters);
 $time_exec = microtime(true) - $time_start;
-reportSwitch("Connected to " . $arrParameters['database'] . " in $time_exec seconds\n");
-reportSwitch("Loaded keys in ".LoadKeys($database, $arrParameters)." seconds\n");
+//reportSwitch("Connected to " . $arrParameters['database'] . " in $time_exec seconds\n");
+//reportSwitch("Loaded keys in ".LoadKeys($database, $arrParameters)." seconds\n");
 
 RunWorkload($database, $arrParameters);
 
