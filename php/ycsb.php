@@ -196,7 +196,7 @@ function AggregateMetrics($duration) {
         $arrOpCounts[$opKey] = count($arrDurations);
         $OverallOpCount += $arrOpCounts[$opKey];
         }
-    $r = $OverallOpCount/$duration * 1000;
+    $r = $OverallOpCount/$duration;
     reportSwitch("[OVERALL] Throughput (Ops/sec), $r \n");
     foreach($arrOpCounts as $opKey => $intOpCounts) {
         $strUpperOp = strtoupper($opKey);
@@ -274,7 +274,7 @@ function RunWorkload($database, $parameters) {
     $time_end = microtime(true) - $time_start;
     // Unfortunately, latencies not stored and reported like in the original script.
     // AggregateMetrics(arrLatency, (end - start) * 1000.0, parameters['num_bucket']);
-    reportSwitch("[OVERALL] Operation run time: $time_end ms\n");
+    reportSwitch("[OVERALL] Operation run time: $time_end s\n");
     AggregateMetrics($time_end);
 
     }
