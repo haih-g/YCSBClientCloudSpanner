@@ -148,14 +148,11 @@ function parseCliOptions() {
     global $arrOPERATIONS;
 
     $longopts = array(
-        "recordcount::",
         "operationcount:",
-        "clienttype::",
         "instance:",
         "database:",
         "table:",
-        "noskip_spanner_setup::",
-        "skip_spanner_teardown::",
+        "numworkers::",
         "workload:",
         );
     $arrParameters = getopt("", $longopts);
@@ -199,7 +196,7 @@ function AggregateMetrics($duration) {
         $arrOpCounts[$opKey] = count($arrDurations);
         $OverallOpCount += $arrOpCounts[$opKey];
         }
-    $r = $OverallOpCount/$duration;
+    $r = $OverallOpCount/$duration * 1000;
     reportSwitch("[OVERALL] Throughput (Ops/sec), $r \n");
     foreach($arrOpCounts as $opKey => $intOpCounts) {
         $strUpperOp = strtoupper($opKey);
@@ -306,7 +303,8 @@ $time_start = microtime(true);
 $database = OpenDatabase($arrParameters);
 $time_exec = microtime(true) - $time_start;
 //reportSwitch("Connected to " . $arrParameters['database'] . " in $time_exec seconds\n");
-//reportSwitch("Loaded keys in ".LoadKeys($database, $arrParameters)." seconds\n");
+$LoadKeysTime = LoadKeys($database, $arrParameters);
+//reportSwitch("Loaded keys in $LoadKeysTime seconds\n");
 
 RunWorkload($database, $arrParameters);
 
