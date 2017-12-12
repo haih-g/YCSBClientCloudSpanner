@@ -1,18 +1,20 @@
 <?php
 namespace Google\Cloud\Samples\Spanner;
 use Google\Cloud\Spanner\SpannerClient;
-/*
-use Symfony\Component\Console\Application;
-use Symfony\Component\Console\Command\Command;
-use Symfony\Component\Console\Input\InputArgument;
-use Symfony\Component\Console\Input\InputOption;
-use Symfony\Component\Console\Input\InputDefinition;
-*/
-# Includes the autoloader for libraries installed with composer
+# Include the autoloader for libraries installed with composer
 require __DIR__ . '/vendor/autoload.php';
 /*
 Uasge:
-php ycsb.php --instance=ycsb-bb9e6936 --database=ycsb table=usertable --operationcount=1 
+php ycsb.php 
+  --operationcount={number of operations} \
+  --instance=[gcloud instance] \
+  --database={database name} \
+  --table={table to use} \
+  --workload={workload file} 
+ 
+Note: all arguments above are mandatory 
+Note: This bnchmark script assumes that the table has a PK field named "id".
+ 
 */
 
 $msg = "";
@@ -25,9 +27,6 @@ $arrOPERATIONS = ['readproportion', 'updateproportion', 'scanproportion', 'inser
 // calls to the same page.
 //class WorkloadThread extends Thread {
 class WorkloadThread {    
-    // It is assumed that all calls are going out the same GRPC connection.
-    // Please clarify if each thread should spawn its own GRPC.
-    
     public $_database;
     public $_arrParameters;
     public $_fltTotalWeight;
@@ -36,7 +35,6 @@ class WorkloadThread {
     public $_arrLatency;
 
     public function __construct($database, $arrParameters, $fltTotalWeight, $arrWeights, $arrOperations) {
-        // Sorry, single threaded only
         $this->_database = $database;
         $this->_arrParameters = $arrParameters;
         $this->_fltTotalWeight = $fltTotalWeight;
@@ -48,7 +46,7 @@ class WorkloadThread {
     public function run() {
         // Run a single thread of the workload
         $i = 0;
-		$intOperationCount = (int)$this->_arrParameters['operationcount'];
+        $intOperationCount = (int)$this->_arrParameters['operationcount'];
         while ($i < $intOperationCount) {
             $i += 1;
             $fltWeight = (float)rand(0, $this->_fltTotalWeight*10000)/10000.0;
@@ -65,7 +63,6 @@ class WorkloadThread {
     public function PerformRead($database, $table, $key) {
         //Changed named to PerformRead because Read is a reserved keyword.
 	      $time_start = microtime(true);
-        //$snapshot = $database->snapshot();
         // Kind of assuming that id is ubiquitous...
         $results = $database->execute("SELECT * FROM $table where id = '$key'");
         foreach ($results as $row) {
@@ -291,11 +288,6 @@ else {
 //    reportSwitch("Called from web browser.\n");
     }
 
-//foreach ($arrParameters as $opKey => $opVal) {
-//    reportSwitch("$opKey value is $opVal\n");
-//    }
-
-
 //reportSwitch("Connecting to " . $arrParameters['database'] . "\n");
 
 // Initial connection
@@ -308,7 +300,7 @@ $LoadKeysTime = LoadKeys($database, $arrParameters);
 
 RunWorkload($database, $arrParameters);
 
-
-if ($msg !="") print $msg;
+// Uncomment if script accidentally thinks it is in a web environmnt.
+//if ($msg !="") print $msg;
 
 ?>
