@@ -5,16 +5,16 @@ use Google\Cloud\Spanner\SpannerClient;
 require __DIR__ . '/vendor/autoload.php';
 /*
 Uasge:
-php ycsb.php 
+php ycsb.php
   --operationcount={number of operations} \
   --instance=[gcloud instance] \
   --database={database name} \
   --table={table to use} \
-  --workload={workload file} 
- 
-Note: all arguments above are mandatory 
+  --workload={workload file}
+
+Note: all arguments above are mandatory
 Note: This bnchmark script assumes that the table has a PK field named "id".
- 
+
 */
 
 $msg = "";
@@ -26,7 +26,7 @@ $arrOPERATIONS = ['readproportion', 'updateproportion', 'scanproportion', 'inser
 // environment.  To multi-thread, please incorporate class into a PHP web page and make multiple
 // calls to the same page.
 //class WorkloadThread extends Thread {
-class WorkloadThread {    
+class WorkloadThread {
     public $_database;
     public $_arrParameters;
     public $_fltTotalWeight;
@@ -143,19 +143,19 @@ class WorkloadThread {
 //Lives outside the class because it will only potentially be called once.
 function parseCliOptions() {
     global $arrOPERATIONS;
-
-    $longopts = array(
-        "operationcount:",
-        "instance:",
-        "database:",
-        "table:",
-        "numworkers::",
-        "workload:",
-        );
-    $arrParameters = getopt("", $longopts);
+    $rawParameters = getopt("p:P:");
+    $arrParameters["workload"] = $rawParameters["P"];
+    foreach($rawParameters["p"] as $param) {
+        $parts = explode("=", $param);
+        $key = $parts[0];
+        $value = $parts[1];
+        if (substr($key, 0, 13) === "cloudspanner.") {
+            $key = substr($key, 13);
+        }
+        $arrParameters[$key] = $value;
+    }
     // Now we have things like $arrParameters["num_worker"]
-
-	  $myfile = fopen($arrParameters['workload'], "r") or die("Unable to open file!");
+    $myfile = fopen($arrParameters['workload'], "r") or die("Unable to open file!");
     while ($line = fgets($myfile)) {
         $parts = explode("=", $line);
 	      $key = trim($parts[0]);
@@ -194,26 +194,26 @@ function AggregateMetrics($duration) {
         $OverallOpCount += $arrOpCounts[$opKey];
         }
     $r = $OverallOpCount/$duration;
-    reportSwitch("[OVERALL] Throughput (Ops/sec), $r \n");
+    reportSwitch("[OVERALL], Throughput (Ops/sec), $r \n");
     foreach($arrOpCounts as $opKey => $intOpCounts) {
         $strUpperOp = strtoupper($opKey);
-        reportSwitch("[$strUpperOp], Operations: $intOpCounts. \n");
+        reportSwitch("[$strUpperOp], Operations, $intOpCounts \n");
         $r = average($arrLatency[$opKey])*1000;
-        reportSwitch("[$strUpperOp], AverageLatency(us) $r \n");
+        reportSwitch("[$strUpperOp], AverageLatency(us), $r \n");
         $r = stanDev($arrLatency[$opKey])*1000;
-        reportSwitch("[$strUpperOp], LatencyVariance(us) $r \n");
+        reportSwitch("[$strUpperOp], LatencyVariance(us), $r \n");
         $r = min($arrLatency[$opKey])*1000;
-        reportSwitch("[$strUpperOp], MinLatency(us) $r \n");
+        reportSwitch("[$strUpperOp], MinLatency(us), $r \n");
         $r = max($arrLatency[$opKey])*1000;
-        reportSwitch("[$strUpperOp], MaxLatency(us) $r \n");
+        reportSwitch("[$strUpperOp], MaxLatency(us), $r \n");
         $r = percentile($arrLatency[$opKey], 0.50)*1000;
-        reportSwitch("[$strUpperOp], 50thPercentile(us) $r \n");
+        reportSwitch("[$strUpperOp], 50thPercentile(us), $r \n");
         $r = percentile($arrLatency[$opKey], 0.95)*1000;
-        reportSwitch("[$strUpperOp], 95thPercentile(us) $r \n");
+        reportSwitch("[$strUpperOp], 95thPercentile(us), $r \n");
         $r = percentile($arrLatency[$opKey], 0.99)*1000;
-        reportSwitch("[$strUpperOp], 99thPercentile(us) $r \n");
+        reportSwitch("[$strUpperOp], 99thPercentile(us), $r \n");
         $r = percentile($arrLatency[$opKey], 0.999)*1000;
-        reportSwitch("[$strUpperOp], 99.9thPercentile(us) $r \n");
+        reportSwitch("[$strUpperOp], 99.9thPercentile(us), $r \n");
         }
     }
 
@@ -271,7 +271,7 @@ function RunWorkload($database, $parameters) {
     $time_end = microtime(true) - $time_start;
     // Unfortunately, latencies not stored and reported like in the original script.
     // AggregateMetrics(arrLatency, (end - start) * 1000.0, parameters['num_bucket']);
-    reportSwitch("[OVERALL] Operation run time: $time_end s\n");
+    reportSwitch("[OVERALL], Operation run time, $time_end\n");
     AggregateMetrics($time_end);
 
     }
