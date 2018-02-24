@@ -185,6 +185,17 @@ function percentile($arrParam, $pct) {
     return $arrParam[$i];
     }
 
+function latencyHistogram($arrParam) {
+    $arrTemp = [];
+    foreach ($arrParam as $a) {
+        $i = (int)($a * 1000);
+        if ($i > 1000) $i = 1000;
+        if (array_key_exists($a, $arrTemp)) $arrTemp[$a] += 1;
+        else $arrTemp[$a] == 1;
+        }
+    return $arrTemp;
+    }
+
 function AggregateMetrics($duration) {
     global $arrLatency;
     $OverallOpCount = 0;
@@ -214,6 +225,11 @@ function AggregateMetrics($duration) {
         reportSwitch("[$strUpperOp], 99thPercentile(us), $r \n");
         $r = percentile($arrLatency[$opKey], 0.999)*1000;
         reportSwitch("[$strUpperOp], 99.9thPercentile(us), $r \n");
+        # Latency histogram
+        $arrTimeBucket = latencyHistogram($arrLatency[$opKey]);
+            foreach ($arrTimeBucket as $timeKey => $r) {
+            reportSwitch("[$strUpperOp], $timeKey $r \n");
+            }
         }
     }
 
