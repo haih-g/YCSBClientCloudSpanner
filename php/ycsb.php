@@ -209,26 +209,26 @@ function AggregateMetrics($duration) {
     foreach($arrOpCounts as $opKey => $intOpCounts) {
         $strUpperOp = strtoupper($opKey);
         reportSwitch("[$strUpperOp], Operations, $intOpCounts \n");
-        $r = average($arrLatency[$opKey])*1000;
+        $r = average($arrLatency[$opKey])*1000000;
         reportSwitch("[$strUpperOp], AverageLatency(us), $r \n");
-        $r = stanDev($arrLatency[$opKey])*1000;
+        $r = stanDev($arrLatency[$opKey])*1000000;
         reportSwitch("[$strUpperOp], LatencyVariance(us), $r \n");
-        $r = min($arrLatency[$opKey])*1000;
+        $r = min($arrLatency[$opKey])*1000000;
         reportSwitch("[$strUpperOp], MinLatency(us), $r \n");
-        $r = max($arrLatency[$opKey])*1000;
+        $r = max($arrLatency[$opKey])*1000000;
         reportSwitch("[$strUpperOp], MaxLatency(us), $r \n");
-        $r = percentile($arrLatency[$opKey], 0.50)*1000;
+        $r = percentile($arrLatency[$opKey], 0.50)*1000000;
         reportSwitch("[$strUpperOp], 50thPercentile(us), $r \n");
-        $r = percentile($arrLatency[$opKey], 0.95)*1000;
+        $r = percentile($arrLatency[$opKey], 0.95)*1000000;
         reportSwitch("[$strUpperOp], 95thPercentile(us), $r \n");
-        $r = percentile($arrLatency[$opKey], 0.99)*1000;
+        $r = percentile($arrLatency[$opKey], 0.99)*1000000;
         reportSwitch("[$strUpperOp], 99thPercentile(us), $r \n");
-        $r = percentile($arrLatency[$opKey], 0.999)*1000;
+        $r = percentile($arrLatency[$opKey], 0.999)*1000000;
         reportSwitch("[$strUpperOp], 99.9thPercentile(us), $r \n");
         # Latency histogram
         $arrTimeBucket = latencyHistogram($arrLatency[$opKey]);
             foreach ($arrTimeBucket as $timeKey => $r) {
-            reportSwitch("[$strUpperOp], $timeKey $r \n");
+            reportSwitch("[$strUpperOp], $timeKey, $r \n");
             }
         }
     }
