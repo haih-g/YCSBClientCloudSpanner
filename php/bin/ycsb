@@ -4,4 +4,4 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 ln -s ${HOME}/vendor ${DIR}/../vendor
 
-php ${DIR}/../ycsb.php "${@:3}"
+php ${DIR}/../ycsb.php "${@:5}"
